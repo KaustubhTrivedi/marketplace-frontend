@@ -5,15 +5,18 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { ArrowRight } from "lucide-react";
-import { useForm } from "react-hook-form";
-import Link from "next/link";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import {
   AuthCredentialsValidator,
   TAuthCredentialsValidator,
 } from "@/lib/validators/account-credentials-validator";
+import { trpc } from "@/trpc/client";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ArrowRight, Route } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { ZodError } from "zod";
 
 const Page = () => {
   const {
@@ -24,8 +27,28 @@ const Page = () => {
     resolver: zodResolver(AuthCredentialsValidator),
   });
 
+  const router = useRouter();
+
+  const { mutate, isLoading } = trpc.auth.createPayloadUser.useMutation({
+    onError: (err) => {
+      if (err.data?.code === "CONFLICT") {
+        toast.error("Email already exists. Sign in instead?");
+        return;
+      }
+      if (err instanceof ZodError) {
+        toast.error(err.issues[0].message);
+        return;
+      }
+      toast.error("An error occurred. Please try again later.");
+    },
+    onSuccess: ({ sentToEmail }) => {
+      toast.success(`Verification email sent to ${sentToEmail}`);
+      router.push("/verify-email?to=" + sentToEmail);
+    },
+  });
+
   const onSubmit = ({ email, password }: TAuthCredentialsValidator) => {
-    // Send data to server
+    mutate({ email, password });
   };
 
   return (
@@ -58,16 +81,27 @@ const Page = () => {
                     })}
                     placeholder="you@example.com"
                   />
+                  {errors?.email && (
+                    <p className="text-sm text-red-500">
+                      {errors.email?.message}
+                    </p>
+                  )}
                 </div>
                 <div className="grid gap-1 py-2">
                   <Label htmlFor="password">Password</Label>
                   <Input
+                    type="password"
                     {...register("password")}
                     className={cn({
                       "focus-visible:ring-red-500": errors.password,
                     })}
                     placeholder="password"
                   />
+                  {errors?.password && (
+                    <p className="text-sm text-red-500">
+                      {errors.password.message}
+                    </p>
+                  )}
                 </div>
                 <Button>Sign Up</Button>
               </div>
